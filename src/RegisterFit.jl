@@ -211,7 +211,7 @@ function uclamp!(u::AbstractArray{T}, maxshift) where T<:Number
 end
 
 function uclamp!(u::AbstractArray{T}, maxshift) where T<:StaticVector
-    uclamp!(reinterpret(eltype(T), u, (length(T), size(u)...)), maxshift)
+    uclamp!(reshape(reinterpret(eltype(T), vec(u)), (length(T), size(u)...)), maxshift)
     u
 end
 
