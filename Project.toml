@@ -1,7 +1,7 @@
 name = "RegisterFit"
 uuid = "36121b08-3789-5198-aff2-59a3443d9b59"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 CenterIndexedArrays = "46a7138f-0d70-54e1-8ada-fb8296f91f24"
