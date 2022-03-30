@@ -81,7 +81,12 @@ end
         @test abs(S[2,2]) < 1e-8
     end
 
-    F = Images.meanfinite(abs.(fixed); dims = (1,2))[1]
+    if Base.VERSION >= v"1.6"
+        F = Images.meanfinite(abs.(fixed); dims = (1,2))[1]
+    else
+        F = Images.meanfinite(abs.(fixed), (1,2))[1]
+    end
+
     df = zeros(2)
     movinge = extrapolate(interpolate(moving, BSpline(Linear())), NaN)
     origin_dest = center(movinge)
@@ -91,7 +96,11 @@ end
         # df[i] = Images.meanfinite(abs.(fixed-AffineTransforms.transform(mov)), (1,2))[1]
         translation = tfm[i].translation - tfm[i].linear*origin_dest + origin_src
         tform = AffineMap(tfm[i].linear,translation)
-        df[i] = Images.meanfinite(abs.(fixed-[movinge(tform([idx[1], idx[2]])...) for idx in CartesianIndices(fixed)]); dims = (1,2))[1]
+        if Base.VERSION >= v"1.6"
+            df[i] = Images.meanfinite(abs.(fixed-[movinge(tform([idx[1], idx[2]])...) for idx in CartesianIndices(fixed)]); dims = (1,2))[1]
+        else
+            df[i] = Images.meanfinite(abs.(fixed-[movinge(tform([idx[1], idx[2]])...) for idx in CartesianIndices(fixed)]), (1,2))[1]
+        end
     end
     @test minimum(df) < 1e-4*F
 end
