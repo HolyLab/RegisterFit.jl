@@ -19,9 +19,15 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
 CenterIndexedArrays = "0.0, 0.1, 0.2"
+CoordinateTransformations = "0.5, 0.6"
+Images = "0.25"
+Interpolations = "0.12, 0.13"
+NLsolve = "4"
+Optim = "1"
 RegisterCore = "0.0, 0.1, 0.2"
-RegisterPenalty = "0.3"
+RegisterPenalty = "0.1, 0.2, 0.3"
 RegisterUtilities = "0.0, 0.1"
+StaticArrays = "0.10, 0.11, 0.12, 1"
 julia = "0.7, 1"
 
 [extras]
