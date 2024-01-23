@@ -6,7 +6,6 @@ version = "0.2.0"
 [deps]
 CenterIndexedArrays = "46a7138f-0d70-54e1-8ada-fb8296f91f24"
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
-Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
@@ -20,18 +19,24 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 [compat]
 CenterIndexedArrays = "0.0, 0.1, 0.2"
 CoordinateTransformations = "0.5, 0.6"
-Images = "0.24, 0.25"
-Interpolations = "0.12, 0.13"
+ImageBase = "0.1"
+ImageTransformations = "0.10"
+Interpolations = "0.12, 0.13, 0.14, 0.15"
+LinearAlgebra = "1"
 NLsolve = "4"
 Optim = "0.22, 1"
 RegisterCore = "0.0, 0.1, 0.2"
 RegisterPenalty = "0.1, 0.2, 0.3"
 RegisterUtilities = "0.0, 0.1"
 StaticArrays = "0.10, 0.11, 0.12, 1"
+Statistics = "1"
+Test = "1"
 julia = "1.6"
 
 [extras]
+ImageBase = "c817782e-172a-44cc-b673-b171935fbb9e"
+ImageTransformations = "02fcd773-0e25-5acc-982a-7f6622650795"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["ImageBase", "ImageTransformations", "Test"]
