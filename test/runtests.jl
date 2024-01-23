@@ -1,5 +1,5 @@
 import RegisterFit
-using Test, CoordinateTransformations, Interpolations, Images, LinearAlgebra
+using Test, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
 using RegisterCore
 
 using RegisterUtilities
@@ -81,11 +81,7 @@ end
         @test abs(S[2,2]) < 1e-8
     end
 
-    if Base.VERSION >= v"1.6"
-        F = Images.meanfinite(abs.(fixed); dims = (1,2))[1]
-    else
-        F = Images.meanfinite(abs.(fixed), (1,2))[1]
-    end
+    F = meanfinite(abs.(fixed); dims = (1,2))[1]
 
     df = zeros(2)
     movinge = extrapolate(interpolate(moving, BSpline(Linear())), NaN)
@@ -93,14 +89,9 @@ end
     origin_src = center(fixed)
     for i = 1:2
         # mov = TransformedArray(movinge, tfm[i])
-        # df[i] = Images.meanfinite(abs.(fixed-AffineTransforms.transform(mov)), (1,2))[1]
         translation = tfm[i].translation - tfm[i].linear*origin_dest + origin_src
         tform = AffineMap(tfm[i].linear,translation)
-        if Base.VERSION >= v"1.6"
-            df[i] = Images.meanfinite(abs.(fixed-[movinge(tform([idx[1], idx[2]])...) for idx in CartesianIndices(fixed)]); dims = (1,2))[1]
-        else
-            df[i] = Images.meanfinite(abs.(fixed-[movinge(tform([idx[1], idx[2]])...) for idx in CartesianIndices(fixed)]), (1,2))[1]
-        end
+        df[i] = meanfinite(abs.(fixed-[movinge(tform([idx[1], idx[2]])...) for idx in CartesianIndices(fixed)]); dims = (1,2))[1]
     end
     @test minimum(df) < 1e-4*F
 end
