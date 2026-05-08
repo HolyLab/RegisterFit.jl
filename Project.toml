@@ -1,6 +1,6 @@
 name = "RegisterFit"
 uuid = "36121b08-3789-5198-aff2-59a3443d9b59"
-version = "0.2.2"
+version = "1.0.0"
 authors = ["Tim Holy <tim.holy@gmail.com>"]
 
 [deps]
