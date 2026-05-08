@@ -154,20 +154,25 @@ aperture) and `thresh` is the denominator threshold.
 For each aperture, the first shift-dimension component of the `argmin` is
 recorded. The returned array has size `(1, length(mms))`.
 
-See also [`RegisterCore.argmin_mismatch`](@ref).
+See also `RegisterCore.argmin_mismatch`.
 
 # Returns
 - `u::Matrix{Float64}` of size `(1, n)` — first shift component at the minimum
   for each of the `n` apertures
 
 # Examples
-```julia
-using RegisterCore
-num1 = [(i - 1)^2 + j^2 for i in -5:5, j in -5:5]
-num2 = [i^2 + j^2 for i in -5:5, j in -5:5]
-mms = [MismatchArray(num1, ones(11, 11)), MismatchArray(num2, ones(11, 11))]
-u = optimize_per_aperture(mms, 0.5)
-# u ≈ [1.0  0.0]  (size (1, 2))
+```jldoctest
+julia> using RegisterCore
+
+julia> num1 = [(i - 1)^2 + j^2 for i in -5:5, j in -5:5];
+
+julia> num2 = [i^2 + j^2 for i in -5:5, j in -5:5];
+
+julia> mms = [MismatchArray(num1, ones(11, 11)), MismatchArray(num2, ones(11, 11))];
+
+julia> optimize_per_aperture(mms, 0.5)
+1×2 Matrix{Float64}:
+ 1.0  0.0
 ```
 """
 function optimize_per_aperture(mms, thresh)
@@ -202,14 +207,22 @@ and visualizing the quadratic fit.
 - `r::CenterIndexedArray` — evaluated mismatch, indexed from `-maxshift` to `+maxshift`
 
 # Examples
-```julia
-using RegisterCore
-num = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5]
-mm = MismatchArray(num, ones(11, 11))
-E0, umin, Q = qfit(mm, 0.5)
-r = qbuild(E0, umin, Q, (5, 5))
-r[1, -2]  # ≈ 0.0 (at the minimum)
-r[0, 0]   # ≈ 5.0 (distance² from minimum)
+```jldoctest
+julia> using RegisterCore
+
+julia> num = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5];
+
+julia> mm = MismatchArray(num, ones(11, 11));
+
+julia> E0, umin, Q = qfit(mm, 0.5);
+
+julia> r = qbuild(E0, umin, Q, (5, 5));
+
+julia> r[1, -2]
+0.0
+
+julia> r[0, 0]
+5.0
 ```
 """
 function qbuild(E0::Real, umin::Vector, Q::Matrix, maxshift)
@@ -388,11 +401,20 @@ transforms. Evaluate alignment quality for each candidate and select the best.
 - `tfms::Vector{AffineMap}` — 2 candidates in 2D, 4 candidates in 3D
 
 # Examples
-```julia
-fixed = zeros(11, 11); fixed[4, 6] = 1.0
-moving = zeros(11, 11); moving[8, 4] = 1.0
-tfms = pat_rotation(fixed, moving)
-# Evaluate each candidate and pick the one with smallest mismatch
+```jldoctest
+julia> fixed = zeros(5, 7); fixed[3, 2:6] .= 1.0;   # horizontal bar
+
+julia> moving = zeros(7, 5); moving[2:6, 3] .= 1.0;  # vertical bar
+
+julia> tfms = pat_rotation(fixed, moving);
+
+julia> length(tfms)
+2
+
+julia> tfms[1].linear   # ≈ 90° rotation
+2×2 Matrix{Float64}:
+  0.0  1.0
+ -1.0  0.0
 ```
 """
 function pat_rotation(fixedmoments::Tuple{Vector,Matrix}, moving::AbstractArray,
@@ -510,12 +532,25 @@ solve, trading accuracy for speed.
 - `Q::Matrix{T}` — symmetric positive-semidefinite curvature matrix of size `(d, d)`
 
 # Examples
-```julia
-using RegisterCore
-num = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5]
-mm = MismatchArray(num, ones(11, 11))
-E0, u0, Q = qfit(mm, 0.5)
-# E0 ≈ 0.0, u0 ≈ [1.0, -2.0], Q ≈ I
+```jldoctest
+julia> using RegisterCore
+
+julia> num = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5];
+
+julia> mm = MismatchArray(num, ones(11, 11));
+
+julia> E0, u0, Q = qfit(mm, 0.5);
+
+julia> E0
+0.0
+
+julia> u0
+2-element Vector{Float64}:
+  1.0
+ -2.0
+
+julia> Q ≈ [1.0 0.0; 0.0 1.0]
+true
 ```
 """
 function qfit(mm::MismatchArray, thresh::Real; maxsep=size(mm), opt::Bool=true)
@@ -620,15 +655,21 @@ mismatch arrays is valid; a `Vector` of 2D mismatch arrays is not.
   `RegisterPenalty.fixed_λ` and `RegisterPenalty.auto_λ`
 
 # Examples
-```julia
-using RegisterCore
-num1 = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5]
-num2 = [(i + 1)^2 + (j - 1)^2 for i in -5:5, j in -5:5]
-denom = ones(11, 11)
-# Container must be 2-D to match the 2-D mismatch arrays
-mms = reshape([MismatchArray(num1, denom), MismatchArray(num2, denom)], 1, 2)
-cs, Qs, mmis = mms2fit!(mms, 0.5)
-cs[1, 1]  # ≈ SVector(1.0, -2.0)
+```jldoctest
+julia> using RegisterCore
+
+julia> num1 = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5];
+
+julia> num2 = [(i + 1)^2 + (j - 1)^2 for i in -5:5, j in -5:5];
+
+julia> denom = ones(11, 11);
+
+julia> mms = reshape([MismatchArray(num1, denom), MismatchArray(num2, denom)], 1, 2);
+
+julia> cs, Qs, mmis = mms2fit!(mms, 0.5);
+
+julia> cs[1, 1] ≈ [1.0, -2.0]
+true
 ```
 """
 function mms2fit!(mms::AbstractArray{A,N}, thresh) where {A<:MismatchArray,N}

@@ -5,7 +5,7 @@ using RegisterCore
 using RegisterUtilities
 
 @testset "Doctests" begin
-    DocMeta.setdocmeta!(RegisterFit, :DocTestSetup, :(using RegisterFit); recursive=true)
+    DocMeta.setdocmeta!(RegisterFit, :DocTestSetup, :(using RegisterFit, RegisterCore); recursive=true)
     doctest(RegisterFit; manual=false)
 end
 
