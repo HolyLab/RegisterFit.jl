@@ -1,10 +1,16 @@
 module RegisterFit
 
-using Interpolations, StaticArrays, Optim, CoordinateTransformations, NLsolve
-using Statistics, LinearAlgebra
-using RegisterPenalty, RegisterCore, CenterIndexedArrays
-
-using Base: @nloops, @nexprs, @nref, @nif
+using CenterIndexedArrays: CenterIndexedArrays, CenterIndexedArray
+using CoordinateTransformations: CoordinateTransformations, AffineMap
+using Interpolations: Interpolations
+using LinearAlgebra: LinearAlgebra, Diagonal, Hermitian, I, cholesky, det, diag, dot, eigen, mul!, svd
+using NLsolve: NLsolve, nlsolve
+using Optim: Optim
+using RegisterCore: RegisterCore, MismatchArray, NumDenom, argmin_mismatch, maxshift
+using RegisterPenalty: RegisterPenalty, interpolate_mm!
+using StaticArrays: StaticArrays, SArray, SVector, Size, StaticVector, similar_type
+using Statistics: Statistics, mean
+import Base.Cartesian: @nloops, @nexprs, @nref, @nif
 
 export
     mismatch2affine,
@@ -18,25 +24,21 @@ export
     uclamp!
 
 """
-# RegisterFit
+RegisterFit provides functions that compute affine transformations minimizing
+image registration mismatch, given per-aperture mismatch data from `RegisterMismatch`.
 
-This module contains a number of functions that calculate affine
-transformations that minimize mismatch.  The functions are organized
-into categories:
+## Global optimization
 
-### Global optimization
+- [`mismatch2affine`](@ref): affine transform from mismatch data by least squares
+- [`pat_rotation`](@ref): rigid alignment via a Principal Axes Transformation
+- [`optimize_per_aperture`](@ref): naive per-aperture displacement search
 
-- `mismatch2affine`: a transformation computed from mismatch data by least squares
-- `pat_rotation`: find the optimal rigid transform via a Principal Axes Transformation
-- `optimize_per_aperture`: naive registration using independent apertures
+## Utilities
 
-### Utilities
-
-- `qfit`: fit a single aperture's mismatch data to a quadratic form
-- `mms2fit!`: prepare an array-of-mismatcharrays for optimization
-- `qbuild`: reconstruct mismatch data from a quadratic form
-- `uclamp!` and `uisvalid!`: check/enforce bounds on optimization
-
+- [`qfit`](@ref): fit a single aperture's mismatch to a quadratic form
+- [`mms2fit!`](@ref): prepare an array of mismatch arrays for optimization
+- [`qbuild`](@ref): reconstruct mismatch data from a quadratic form
+- [`uclamp!`](@ref) and [`uisvalid`](@ref): enforce/check bounds on displacements
 """
 RegisterFit
 
@@ -45,20 +47,26 @@ const register_half = 0.5001
 const register_half_safe = 0.51
 
 """
-`tform = mismatch2affine(mms, thresh, knots)` returns an affine
-transformation that is a "best initial guess" for the transformation
-that would minimize the mismatch.  The mismatch is encoded in `mms`
-(of the format returned by RegisterMismatch), and `thresh` is the
-denominator-threshold that determines regions that have sufficient
-pixel/intensity overlap to be considered valid.  `knots` represents
-the aperture centers (see RegisterDeformation).
+    tform = mismatch2affine(mms, thresh, knots)
 
-The algorithm is based on fitting each aperture to a quadratic, and
-then performing a least-squares minimization of the
-sum-over-apertures.  The strength of this procedure is that it finds a
-global solution; however, it is based on a coarse approximation, the
-quadratic fit.  If you want to polish `tform` without relying on the
-quadratic fit, see `optimize`.
+Return an `AffineMap` that is a least-squares "best initial guess" for the
+transformation minimizing the mismatch.
+
+`mms` is an array of `MismatchArray`s (one per aperture, in the format returned
+by `RegisterMismatch`). `thresh` is the denominator threshold that determines
+which aperture regions have sufficient pixel/intensity overlap to be valid.
+`knots` specifies the aperture centers (see `RegisterDeformation`).
+
+The algorithm fits each aperture to a quadratic, then solves a global least-squares
+problem over all apertures — guaranteeing a global solution at the cost of the
+quadratic approximation. If `thresh` is too restrictive, it is halved up to three
+times before raising an error.
+
+# Returns
+- `tform::AffineMap` — affine transformation (linear map + translation)
+
+To refine `tform` beyond the quadratic approximation, see `optimize` in the
+registration pipeline.
 """
 function mismatch2affine(mms, thresh, knots)
     gridsize = size(mms)
@@ -137,22 +145,45 @@ end
 
 
 """
-`u = optimize_per_aperture(mms, thresh)` computes the "naive"
-displacement in each aperture to minimize the mismatch. Each aperture
-is examined independently of all others. `thresh` establishes a
-threshold for the mismatch data.
+    u = optimize_per_aperture(mms, thresh)
 
-See also `indmin_mismatch`.
+Compute the naive per-aperture displacement that minimizes the mismatch, treating
+each aperture independently. `mms` is a `Vector` of `MismatchArray`s (one per
+aperture) and `thresh` is the denominator threshold.
+
+For each aperture, the first shift-dimension component of the `argmin` is
+recorded. The returned array has size `(1, length(mms))`.
+
+See also `RegisterCore.argmin_mismatch`.
+
+# Returns
+- `u::Matrix{Float64}` of size `(1, n)` — first shift component at the minimum
+  for each of the `n` apertures
+
+# Examples
+```jldoctest
+julia> using RegisterCore
+
+julia> num1 = [(i - 1)^2 + j^2 for i in -5:5, j in -5:5];
+
+julia> num2 = [i^2 + j^2 for i in -5:5, j in -5:5];
+
+julia> mms = [MismatchArray(num1, ones(11, 11)), MismatchArray(num2, ones(11, 11))];
+
+julia> optimize_per_aperture(mms, 0.5)
+1×2 Matrix{Float64}:
+ 1.0  0.0
+```
 """
 function optimize_per_aperture(mms, thresh)
     gridsize = size(mms)
     nd = length(gridsize)
     u = zeros(nd, gridsize...)
     utmp = zeros(nd)
-    for (iblock, mm) in enumerate(mms)
-        I = indmin_mismatch(mm, thresh)
-        for idim in 1:nd
-            u[idim, iblock] = I[idim]
+    for (iblock,mm) in enumerate(mms)
+        I = argmin_mismatch(mm, thresh)
+        for idim = 1:nd
+            u[idim,iblock] = I[idim]
         end
     end
     return u
@@ -160,9 +191,39 @@ end
 
 
 """
-`r = qbuild(E0, u0, Q, maxshift)` builds an estimate of the mismatch
-ratio given the quadratic form parameters `E0, u0, Q` obtained from
-`qfit`.  Often useful for debugging or visualization.
+    r = qbuild(E0, umin, Q, maxshift)
+
+Build a `CenterIndexedArray` representing the quadratic mismatch approximation
+over the full shift domain `[-maxshift[d], maxshift[d]]`. The quadratic model is:
+
+```
+    r[u] = E0 + (u - umin)' * Q * (u - umin)
+```
+
+`E0`, `umin`, and `Q` are the outputs of [`qfit`](@ref). Useful for debugging
+and visualizing the quadratic fit.
+
+# Returns
+- `r::CenterIndexedArray` — evaluated mismatch, indexed from `-maxshift` to `+maxshift`
+
+# Examples
+```jldoctest
+julia> using RegisterCore
+
+julia> num = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5];
+
+julia> mm = MismatchArray(num, ones(11, 11));
+
+julia> E0, umin, Q = qfit(mm, 0.5);
+
+julia> r = qbuild(E0, umin, Q, (5, 5));
+
+julia> r[1, -2]
+0.0
+
+julia> r[0, 0]
+5.0
+```
 """
 function qbuild(E0::Real, umin::Vector, Q::Matrix, maxshift)
     d = length(maxshift)
@@ -184,12 +245,25 @@ function qbuild(E0::Real, umin::Vector, Q::Matrix, maxshift)
 end
 
 """
-`tf = uisvalid(u, maxshift)` returns `true` if all entries of `u` are
-within the allowed domain.
+    tf = uisvalid(u, maxshift)
+
+Return `true` if every entry of the displacement array `u` is within the allowed
+domain: `|u[idim, j]| < maxshift[idim] - 0.5001` for all aperture positions `j`
+and displacement dimensions `idim`. Returns `false` as soon as any entry violates
+this condition.
+
+# Examples
+```jldoctest
+julia> uisvalid([1.5, 0.5], (3, 3))
+true
+
+julia> uisvalid([2.5, 0.5], (3, 3))
+false
+```
 """
 function uisvalid(u::AbstractArray{T}, maxshift) where {T <: Number}
     nd = size(u, 1)
-    sztail = Base.tail(size(u))
+    sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
         if abs(u[idim, j]) >= maxshift[idim] - register_half
             return false
@@ -199,11 +273,28 @@ function uisvalid(u::AbstractArray{T}, maxshift) where {T <: Number}
 end
 
 """
-`u = uclamp!(u, maxshift)` clamps the values of `u` to the allowed domain.
+    uclamp!(u, maxshift)
+
+Clamp the entries of the displacement array `u` in-place so that each satisfies
+`|u[idim, j]| ≤ maxshift[idim] - 0.51`. Returns `u`.
+
+Accepts both numeric arrays of shape `(nd, apertures...)` and arrays whose elements
+are `StaticVector`s (e.g., `Array{SVector{N,T}}`); both representations are mutated
+in-place.
+
+# Examples
+```jldoctest
+julia> u = [4.0, -5.0];
+
+julia> uclamp!(u, (3, 3))
+2-element Vector{Float64}:
+  2.49
+ -2.49
+```
 """
 function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
     nd = size(u, 1)
-    sztail = Base.tail(size(u))
+    sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
         u[idim, j] = max(-maxshift[idim] + register_half_safe, min(u[idim, j], maxshift[idim] - register_half_safe))
     end
@@ -216,9 +307,31 @@ function uclamp!(u::AbstractArray{T}, maxshift) where {T <: StaticVector}
 end
 
 """
-`center, cov = principalaxes(img)` computes the principal axes of an
-image `img`.  `center` is the centroid of intensity, and `cov` the
-covariance matrix of the intensity.
+    center, cov = principalaxes(img)
+
+Compute the intensity-weighted centroid and covariance of image `img`.
+Coordinates are 1-based array indices. `NaN` pixels are ignored.
+
+# Returns
+- `center::Vector{T}` — intensity-weighted centroid, length `ndims(img)`
+- `cov::Matrix{T}` — `N×N` intensity-weighted covariance matrix
+
+# Examples
+```jldoctest
+julia> img = zeros(5, 5); img[3, 3] = 1.0;
+
+julia> center, cov = principalaxes(img);
+
+julia> center
+2-element Vector{Float64}:
+ 3.0
+ 3.0
+
+julia> cov
+2×2 Matrix{Float64}:
+ 0.0  0.0
+ 0.0  0.0
+```
 """
 function principalaxes(img::AbstractArray{T, N}) where {T, N}
     Ts = typeof(zero(T) / 1)
@@ -266,23 +379,43 @@ end
 end
 
 """
-`tfms = pat_rotation(fixed, moving, [SD=eye])` computes the Principal
-Axes Transform aligning the low-order moments of two images. The
-reference image is `fixed`, and `moving` is the raw moving image that
-you wish to align to `fixed`.  `SD` is a "spacedimensions" matrix, in
-some cases needed to ensure that rotations in *physical* space
-correspond to orthogonal matrices in array-index units.  For example,
-if your axes are not uniformly sampled, `SD = diagm(voxelspacing)`.
+    tfms = pat_rotation(fixed, moving)
+    tfms = pat_rotation(fixed, moving, SD)
+    tfms = pat_rotation(fixedpa, moving)
+    tfms = pat_rotation(fixedpa, moving, SD)
 
-If you're aligning many images to `fixed`, you may alternatively call
-this as `tfms = pat_rotation(fixedpa, moving, [SD=eye])`.  `fixedpa`
-is a `(center,cov)` tuple obtained from `principalaxes(fixed)`.
+Compute the Principal Axes Transform (PAT) aligning the low-order intensity
+moments of two images. `fixed` is the reference image and `moving` is the image
+to align. `fixedpa` is a `(center, cov)` tuple from [`principalaxes`](@ref),
+useful when aligning many images to the same reference to avoid recomputing its
+principal axes.
 
-`tfms` is a list of potential AffineTransform candidates.  PA data,
-being based on ellipsoids, are ambiguous up to rotations by 180
-degrees (i.e., sign-flips of even numbers of coordinates).
-Consequently, you may need to check all of the candidates for the one
-that produces the best alignment.
+`SD` is an optional spatial-dimensions matrix that accounts for non-isotropic
+sampling (e.g., `SD = Diagonal(voxelspacing)`). Defaults to the identity.
+
+Because intensity ellipsoids are ambiguous up to 180° rotations (sign-flips of
+an even number of coordinate axes), the function returns multiple candidate
+transforms. Evaluate alignment quality for each candidate and select the best.
+
+# Returns
+- `tfms::Vector{AffineMap}` — 2 candidates in 2D, 4 candidates in 3D
+
+# Examples
+```jldoctest
+julia> fixed = zeros(5, 7); fixed[3, 2:6] .= 1.0;   # horizontal bar
+
+julia> moving = zeros(7, 5); moving[2:6, 3] .= 1.0;  # vertical bar
+
+julia> tfms = pat_rotation(fixed, moving);
+
+julia> length(tfms)
+2
+
+julia> tfms[1].linear   # ≈ 90° rotation
+2×2 Matrix{Float64}:
+  0.0  1.0
+ -1.0  0.0
+```
 """
 function pat_rotation(
         fixedmoments::Tuple{Vector, Matrix}, moving::AbstractArray,
@@ -330,7 +463,7 @@ function pat_rotation(
     return tfms
 end
 
-pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = eye(ndims(fixed))) =
+pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = Matrix{Float64}(I, ndims(fixed), ndims(fixed))) =
     pat_rotation(principalaxes(fixed), moving, SD)
 
 function pat_at(S, SD, c, fmean, mmean)
@@ -378,21 +511,49 @@ end
 end
 
 """
-`E0, u0, Q = qfit(mm, thresh; [maxsep=size(mm), opt=true])` performs a
-quadratic fit of the mismatch data in `mm`.  On output, `u0` and `E0`
-hold the position and value, respectively, of the shift with smallest
-mismatch, and `Q` is a matrix representing the best fit to a model
+    E0, u0, Q = qfit(mm, thresh; maxsep=size(mm), opt=true)
+
+Perform a quadratic fit of the mismatch data in `mm`. Returns the mismatch value
+`E0` and shift `u0` at the minimum, plus the curvature matrix `Q` of the
+best-fit model:
 
 ```
-    mm ≈ E0 + (u-u0)'*Q*(u-u0)
+    mm ≈ E0 + (u - u0)' * Q * (u - u0)
 ```
-Only those shift-locations with `mm[i].denom > thresh` are used in
-performing the fit.
 
-`maxsep` allows you to restrict the fit to a region where each
-coordinate satisfies `|u[d]-u0[d]| <= maxsep[d]`. If `opt` is false,
-`Q` is a heuristic estimate of the best-fit `Q`. This can boost
-performance at the cost of accuracy.
+Only shift-locations where `mm[i].denom > thresh` are used. If no valid locations
+exist, returns `(zero(T), zeros(T, d), zeros(T, d, d))`.
+
+`maxsep` restricts the fit to shifts satisfying `|u[d] - u0[d]| ≤ maxsep[d]`.
+Setting `opt=false` uses a fast heuristic for `Q` instead of a full nonlinear
+solve, trading accuracy for speed.
+
+# Returns
+- `E0::T` — mismatch value at the fitted minimum
+- `u0::Vector{T}` — shift coordinates of the fitted minimum (length `ndims(mm)`)
+- `Q::Matrix{T}` — symmetric positive-semidefinite curvature matrix of size `(d, d)`
+
+# Examples
+```jldoctest
+julia> using RegisterCore
+
+julia> num = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5];
+
+julia> mm = MismatchArray(num, ones(11, 11));
+
+julia> E0, u0, Q = qfit(mm, 0.5);
+
+julia> E0
+0.0
+
+julia> u0
+2-element Vector{Float64}:
+  1.0
+ -2.0
+
+julia> Q ≈ [1.0 0.0; 0.0 1.0]
+true
+```
 """
 function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true)
     return qfit(mm, thresh, maxsep, opt)
@@ -478,12 +639,40 @@ end
 end
 
 """
-`cs, Qs, mmis = mms2fit!(mms, thresh)` computes the shift and
-quadratic-fit values for the array-of-mismatcharrays `mms`, using a
-threshold of `thresh`. It also prepares `mms` for interpolation,
-modifying the data in-place (after computing `cs` and `Qs`).
+    cs, Qs, mmis = mms2fit!(mms, thresh)
 
-The return values are suited for input the `fixed_λ` and `auto_λ`.
+Compute per-aperture shifts and quadratic-fit matrices for the N-dimensional
+array-of-`MismatchArray`s `mms`, using `thresh` as the denominator threshold.
+Also prepares `mms` for interpolation, modifying it in-place after extracting
+`cs` and `Qs`.
+
+The dimension `N` of the container `mms` must equal the number of spatial
+dimensions of each `MismatchArray` element. For example, a 2×3 matrix of 2D
+mismatch arrays is valid; a `Vector` of 2D mismatch arrays is not.
+
+# Returns
+- `cs`: `Array{SVector{N,T},N}` — per-aperture shift positions
+- `Qs`: `Array{SMatrix{N,N,T},N}` — per-aperture quadratic curvature matrices
+- `mmis`: array of interpolated `MismatchArray`s, suitable for input to
+  `RegisterPenalty.fixed_λ` and `RegisterPenalty.auto_λ`
+
+# Examples
+```jldoctest
+julia> using RegisterCore
+
+julia> num1 = [(i - 1)^2 + (j + 2)^2 for i in -5:5, j in -5:5];
+
+julia> num2 = [(i + 1)^2 + (j - 1)^2 for i in -5:5, j in -5:5];
+
+julia> denom = ones(11, 11);
+
+julia> mms = reshape([MismatchArray(num1, denom), MismatchArray(num2, denom)], 1, 2);
+
+julia> cs, Qs, mmis = mms2fit!(mms, 0.5);
+
+julia> cs[1, 1] ≈ [1.0, -2.0]
+true
+```
 """
 function mms2fit!(mms::AbstractArray{A, N}, thresh) where {A <: MismatchArray, N}
     T = eltype(eltype(A))
