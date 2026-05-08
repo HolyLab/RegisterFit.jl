@@ -1,8 +1,12 @@
 import RegisterFit
-using Test, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
+using Test, Aqua, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
 using RegisterCore
 
 using RegisterUtilities
+
+@testset "Aqua" begin
+    Aqua.test_all(RegisterFit)
+end
 
 @testset "qfit" begin
     denom = ones(11,11)
