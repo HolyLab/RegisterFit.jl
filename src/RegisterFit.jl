@@ -1,10 +1,16 @@
 module RegisterFit
 
-using Interpolations, StaticArrays, Optim, CoordinateTransformations, NLsolve
-using Statistics, LinearAlgebra
-using RegisterPenalty, RegisterCore, CenterIndexedArrays
-
-using Base: @nloops, @nexprs, @nref, @nif
+using CenterIndexedArrays: CenterIndexedArrays, CenterIndexedArray
+using CoordinateTransformations: CoordinateTransformations, AffineMap
+using Interpolations: Interpolations
+using LinearAlgebra: LinearAlgebra, Diagonal, Hermitian, I, cholesky, det, diag, dot, eigen, mul!, svd
+using NLsolve: NLsolve, nlsolve
+using Optim: Optim
+using RegisterCore: RegisterCore, MismatchArray, NumDenom, maxshift
+using RegisterPenalty: RegisterPenalty, interpolate_mm!
+using StaticArrays: StaticArrays, SArray, SVector, Size, StaticVector, similar_type
+using Statistics: Statistics, mean
+import Base.Cartesian: @nloops, @nexprs, @nref, @nif
 
 export
     mismatch2affine,

@@ -1,11 +1,15 @@
 import RegisterFit
-using Test, Aqua, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
+using Test, Aqua, ExplicitImports, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
 using RegisterCore
 
 using RegisterUtilities
 
 @testset "Aqua" begin
     Aqua.test_all(RegisterFit)
+end
+
+@testset "ExplicitImports" begin
+    test_explicit_imports(RegisterFit)
 end
 
 @testset "qfit" begin
