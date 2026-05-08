@@ -1,8 +1,13 @@
 import RegisterFit
-using Test, Aqua, ExplicitImports, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
+using Test, Aqua, ExplicitImports, Documenter, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
 using RegisterCore
 
 using RegisterUtilities
+
+@testset "Doctests" begin
+    DocMeta.setdocmeta!(RegisterFit, :DocTestSetup, :(using RegisterFit); recursive=true)
+    doctest(RegisterFit; manual=false)
+end
 
 @testset "Aqua" begin
     Aqua.test_all(RegisterFit)
