@@ -65,21 +65,21 @@ function mismatch2affine(mms, thresh, knots)
     N = length(gridsize)
     mm = first(mms)
     T = eltype(eltype(mm))
-    TFT = typeof(one(T)/2)  # transformtype; it needs to be a floating-point type
+    TFT = typeof(one(T) / 2)  # transformtype; it needs to be a floating-point type
     n = prod(gridsize)
     # Fit the parameters of each quadratic
     u0 = Vector{Any}(undef, n)
-    Q =  Vector{Any}(undef, n)
+    Q = Vector{Any}(undef, n)
     i = 0
     nnz = 0
     nreps = 0
-    while nnz < N+1 && nreps < 3
+    while nnz < N + 1 && nreps < 3
         for mm in mms
             i += 1
             E0, u0[i], Q[i] = qfit(mm, thresh)
-            nnz += any(Q[i].!=0)
+            nnz += any(Q[i] .!= 0)
         end
-        if nnz < N+1
+        if nnz < N + 1
             @warn("Insufficent valid points in mismatch2affine. Halving thresh and trying again.")
             thresh /= 2
             nreps += 1
@@ -92,31 +92,31 @@ function mismatch2affine(mms, thresh, knots)
     end
     # Solve the global sum-over-quadratics problem
     x = Vector{Vector{TFT}}(undef, n)   # knot
-    center = convert(Vector{TFT}, ([arraysize(knots)...] .+ 1)/2)
-    for (i,c) in eachknot(knots)
+    center = convert(Vector{TFT}, ([arraysize(knots)...] .+ 1) / 2)
+    for (i, c) in eachknot(knots)
         x[i] = convert(Vector{TFT}, c) - center
     end
     QB = zeros(T, d, d)
     tb = zeros(T, d)
-    L = zeros(T, d*(d+1), d*(d+1))
-    for i = 1:n
+    L = zeros(T, d * (d + 1), d * (d + 1))
+    for i in 1:n
         tQ = Q[i]
         tx = x[i]
-        xu = tx+u0[i]
-        tmp = tQ*xu
-        QB += tmp*tx'
+        xu = tx + u0[i]
+        tmp = tQ * xu
+        QB += tmp * tx'
         tb += tmp
-        for m=1:d, l=1:d, k=1:d, j=1:d
-            L[j+(k-1)*d, l+(m-1)*d] += tQ[j,l]*tx[m]*tx[k]
+        for m in 1:d, l in 1:d, k in 1:d, j in 1:d
+            L[j + (k - 1) * d, l + (m - 1) * d] += tQ[j, l] * tx[m] * tx[k]
         end
-        for l=1:d, k=1:d, j=1:d
-            L[j+(k-1)*d, d*d+l] += tQ[j,l]*tx[k]
+        for l in 1:d, k in 1:d, j in 1:d
+            L[j + (k - 1) * d, d * d + l] += tQ[j, l] * tx[k]
         end
-        for m=1:d, l=1:d, j=1:d
-            L[d*d+j, l+(m-1)*d] += tQ[j,l]*tx[m]
+        for m in 1:d, l in 1:d, j in 1:d
+            L[d * d + j, l + (m - 1) * d] += tQ[j, l] * tx[m]
         end
-        for l=1:d, j=1:d
-            L[d*d+j, d*d+l] += tQ[j,l]
+        for l in 1:d, j in 1:d
+            L[d * d + j, d * d + l] += tQ[j, l]
         end
     end
     if all(L .== 0)
@@ -124,15 +124,15 @@ function mismatch2affine(mms, thresh, knots)
     end
     local rt
     try
-        rt = L\[QB[:];tb]
+        rt = L \ [QB[:];tb]
     catch
         @warn("The data do not suffice to determine a full affine transformation with this grid size---\n  perhaps the only supra-threshold block was the center one?\n  Defaulting to a translation (advice: reconsider your threshold).")
-        t = L[d^2+1:end, d^2+1:end]\tb
+        t = L[(d^2 + 1):end, (d^2 + 1):end] \ tb
         return tformtranslate(convert(Vector{T}, t))
     end
-    R = reshape(rt[1:d*d], d, d)
-    t = rt[d*d+1:end]
-    AffineMap(convert(Matrix{T}, R), convert(Vector{T}, t))
+    R = reshape(rt[1:(d * d)], d, d)
+    t = rt[(d * d + 1):end]
+    return AffineMap(convert(Matrix{T}, R), convert(Vector{T}, t))
 end
 
 
@@ -149,13 +149,13 @@ function optimize_per_aperture(mms, thresh)
     nd = length(gridsize)
     u = zeros(nd, gridsize...)
     utmp = zeros(nd)
-    for (iblock,mm) in enumerate(mms)
+    for (iblock, mm) in enumerate(mms)
         I = indmin_mismatch(mm, thresh)
-        for idim = 1:nd
-            u[idim,iblock] = I[idim]
+        for idim in 1:nd
+            u[idim, iblock] = I[idim]
         end
     end
-    u
+    return u
 end
 
 
@@ -166,53 +166,53 @@ ratio given the quadratic form parameters `E0, u0, Q` obtained from
 """
 function qbuild(E0::Real, umin::Vector, Q::Matrix, maxshift)
     d = length(maxshift)
-    (size(Q,1) == d && size(Q,2) == d && length(umin) == d) || error("Size mismatch")
-    szout = ((2*[maxshift...].+1)...,)
+    (size(Q, 1) == d && size(Q, 2) == d && length(umin) == d) || error("Size mismatch")
+    szout = ((2 * [maxshift...] .+ 1)...,)
     out = zeros(eltype(Q), szout)
     j = 1
     du = similar(umin)
-    Qdu = similar(umin, typeof(one(eltype(Q))*one(eltype(du))))
+    Qdu = similar(umin, typeof(one(eltype(Q)) * one(eltype(du))))
     for c in CartesianIndices(szout)
-        for idim = 1:d
+        for idim in 1:d
             du[idim] = c[idim] - maxshift[idim] - 1 - umin[idim]
         end
         uQu = dot(du, mul!(Qdu, Q, du))
         out[j] = E0 + uQu
         j += 1
     end
-    CenterIndexedArray(out)
+    return CenterIndexedArray(out)
 end
 
 """
 `tf = uisvalid(u, maxshift)` returns `true` if all entries of `u` are
 within the allowed domain.
 """
-function uisvalid(u::AbstractArray{T}, maxshift) where T<:Number
-    nd = size(u,1)
+function uisvalid(u::AbstractArray{T}, maxshift) where {T <: Number}
+    nd = size(u, 1)
     sztail = Base.tail(size(u))
-    for j in CartesianIndices(sztail), idim = 1:nd
-        if abs(u[idim,j]) >= maxshift[idim]-register_half
+    for j in CartesianIndices(sztail), idim in 1:nd
+        if abs(u[idim, j]) >= maxshift[idim] - register_half
             return false
         end
     end
-    true
+    return true
 end
 
 """
 `u = uclamp!(u, maxshift)` clamps the values of `u` to the allowed domain.
 """
-function uclamp!(u::AbstractArray{T}, maxshift) where T<:Number
-    nd = size(u,1)
+function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
+    nd = size(u, 1)
     sztail = Base.tail(size(u))
-    for j in CartesianIndices(sztail), idim = 1:nd
-        u[idim,j] = max(-maxshift[idim]+register_half_safe, min(u[idim,j], maxshift[idim]-register_half_safe))
+    for j in CartesianIndices(sztail), idim in 1:nd
+        u[idim, j] = max(-maxshift[idim] + register_half_safe, min(u[idim, j], maxshift[idim] - register_half_safe))
     end
-    u
+    return u
 end
 
-function uclamp!(u::AbstractArray{T}, maxshift) where T<:StaticVector
+function uclamp!(u::AbstractArray{T}, maxshift) where {T <: StaticVector}
     uclamp!(reshape(reinterpret(eltype(T), vec(u)), (length(T), size(u)...)), maxshift)
-    u
+    return u
 end
 
 """
@@ -220,15 +220,15 @@ end
 image `img`.  `center` is the centroid of intensity, and `cov` the
 covariance matrix of the intensity.
 """
-function principalaxes(img::AbstractArray{T,N}) where {T,N}
-    Ts = typeof(zero(T)/1)
+function principalaxes(img::AbstractArray{T, N}) where {T, N}
+    Ts = typeof(zero(T) / 1)
     psums = pa_init(Ts, size(img))   # partial sums along all but one axis
     # Use a two-pass algorithm
     # First the partial sums, which we use to compute the centroid
     for I in CartesianIndices(axes(img))
         @inbounds v = img[I]
         if !isnan(v)
-            @inbounds for d = 1:N
+            @inbounds for d in 1:N
                 psums[d][I[d]] += v
             end
         end
@@ -239,30 +239,30 @@ function principalaxes(img::AbstractArray{T,N}) where {T,N}
     for I in CartesianIndices(axes(img))
         @inbounds v = img[I]
         if !isnan(v)
-            for j = 1:N
+            for j in 1:N
                 Δj = I[j] - m[j]
-                for i = j+1:N
-                    cov[i, j] += v * (I[i]-m[i]) * Δj
+                for i in (j + 1):N
+                    cov[i, j] += v * (I[i] - m[i]) * Δj
                 end
             end
         end
     end
-    for d = 1:N
-        cov[d, d] = sum(psums[d] .* ((1:length(psums[d])).-m[d]).^2)
+    for d in 1:N
+        cov[d, d] = sum(psums[d] .* ((1:length(psums[d])) .- m[d]) .^ 2)
     end
-    for j = 1:N, i = j:N
+    for j in 1:N, i in j:N
         cov[i, j] /= s
     end
-    for j = 1:N, i = 1:j-1
+    for j in 1:N, i in 1:(j - 1)
         cov[i, j] = cov[j, i]
     end
-    m, cov
+    return m, cov
 end
 
 @noinline pa_init(::Type{S}, sz) where {S} = [zeros(S, s) for s in sz]
-@noinline function pa_centroid(psums::Vector{Vector{S}}) where S
+@noinline function pa_centroid(psums::Vector{Vector{S}}) where {S}
     s = sum(psums[1])
-    s, S[sum(psums[d] .* (1:length(psums[d]))) for d = 1:length(psums)] / s
+    return s, S[sum(psums[d] .* (1:length(psums[d]))) for d in 1:length(psums)] / s
 end
 
 """
@@ -284,92 +284,94 @@ degrees (i.e., sign-flips of even numbers of coordinates).
 Consequently, you may need to check all of the candidates for the one
 that produces the best alignment.
 """
-function pat_rotation(fixedmoments::Tuple{Vector,Matrix}, moving::AbstractArray,
-                        SD = Matrix{Float64}(I,ndims(moving),ndims(moving)))
+function pat_rotation(
+        fixedmoments::Tuple{Vector, Matrix}, moving::AbstractArray,
+        SD = Matrix{Float64}(I, ndims(moving), ndims(moving))
+    )
     nd = ndims(moving)
     nd > 3 && error("Dimensions higher than 3 not supported") # list-generation doesn't yet generalize
     function eigensort2D(var)
         ed = eigen(var)
         if ed.values[1] > ed.values[2]
-            return [ed.values[2], ed.values[1]], ed.vectors*[0. 1.; 1. 0.]
+            return [ed.values[2], ed.values[1]], ed.vectors * [0.0 1.0; 1.0 0.0]
         end
-        ed.values, ed.vectors
+        return ed.values, ed.vectors
     end
     fmean, fvar = fixedmoments
     nd = length(fmean)
-    fvar = SD*fvar*SD'
+    fvar = SD * fvar * SD'
     fD, fV = eigensort2D(fvar)
     mmean, mvar = principalaxes(moving)
-    mvar = SD*mvar*SD'
+    mvar = SD * mvar * SD'
     mD, mV = eigensort2D(mvar)
-    R = mV/fV
+    R = mV / fV
     if det(R) < 0     # ensure it's a rotation
-        R[:,1] = -R[:,1]
+        R[:, 1] = -R[:, 1]
     end
-    c = ([size(moving)...].+1)/2
+    c = ([size(moving)...] .+ 1) / 2
     tfms = [pat_at(R, SD, c, fmean, mmean)]
-    for i = 1:nd
-        for j = i+1:nd
+    for i in 1:nd
+        for j in (i + 1):nd
             Rc = copy(R)
-            Rc[:,i] = -Rc[:,i]
-            Rc[:,j] = -Rc[:,j]
+            Rc[:, i] = -Rc[:, i]
+            Rc[:, j] = -Rc[:, j]
             push!(tfms, pat_at(Rc, SD, c, fmean, mmean))
         end
     end
-#     # Debugging check
-#     @show fvar
-#     for i = 1:length(tfms)
-#         Sp = tfms[i].scalefwd
-#         S = SD*Sp/SD
-#         @show S
-#         @show R
-#         @show S'*mvar*S
-#     end
-    tfms
+    #     # Debugging check
+    #     @show fvar
+    #     for i = 1:length(tfms)
+    #         Sp = tfms[i].scalefwd
+    #         S = SD*Sp/SD
+    #         @show S
+    #         @show R
+    #         @show S'*mvar*S
+    #     end
+    return tfms
 end
 
 pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = eye(ndims(fixed))) =
     pat_rotation(principalaxes(fixed), moving, SD)
 
 function pat_at(S, SD, c, fmean, mmean)
-    Sp = SD\(S*SD)
-    bp = (mmean-c) - Sp*(fmean-c)
-    AffineMap(Sp, bp)
+    Sp = SD \ (S * SD)
+    bp = (mmean - c) - Sp * (fmean - c)
+    return AffineMap(Sp, bp)
 end
 
 #### Low-level utilities
 
-@generated function qfit_core!(dE::Array{T,2}, V4::Array{T,2}, C::Array{T,4}, mm::Array{NumDenom{T},N}, thresh, umin::NTuple{N,Int}, E0, maxsep::NTuple{N,Int}) where {T,N}
+@generated function qfit_core!(dE::Array{T, 2}, V4::Array{T, 2}, C::Array{T, 4}, mm::Array{NumDenom{T}, N}, thresh, umin::NTuple{N, Int}, E0, maxsep::NTuple{N, Int}) where {T, N}
     # The cost of generic matrix-multiplies is too high, so we write
     # these out by hand.
-    quote
-        @nexprs $N i->(@nexprs $N j->j<i ? nothing : (dE_i_j = zero(T); V4_i_j = 0))
-        @nexprs $N d->(umin_d = umin[d])
-        @nexprs $N iter1->(@nexprs $N iter2->iter2<iter1 ? nothing : (@nexprs $N iter3->iter3<iter2 ? nothing : (@nexprs $N iter4->iter4<iter3 ? nothing : (C_iter1_iter2_iter3_iter4 = zero(T)))))
+    return quote
+        @nexprs $N i -> (@nexprs $N j -> j < i ? nothing : (dE_i_j = zero(T); V4_i_j = 0))
+        @nexprs $N d -> (umin_d = umin[d])
+        @nexprs $N iter1 -> (@nexprs $N iter2 -> iter2 < iter1 ? nothing : (@nexprs $N iter3 -> iter3 < iter2 ? nothing : (@nexprs $N iter4 -> iter4 < iter3 ? nothing : (C_iter1_iter2_iter3_iter4 = zero(T)))))
         @nloops $N i mm begin
-            @nif $(N+1) d->(abs(i_d-umin[d]) > maxsep[d]) d->(continue) d->nothing
+            @nif $(N + 1) d -> (abs(i_d - umin[d]) > maxsep[d]) d -> (continue) d -> nothing
             nd = @nref $N mm i
             num, den = nd.num, nd.denom
             if den > thresh
-                @nexprs $N d->(v_d = i_d - umin_d)
+                @nexprs $N d -> (v_d = i_d - umin_d)
                 v2 = 0
-                @nexprs $N d->(v2 += v_d*v_d)
-                r = num/den
-                dE0 = r-E0
-                @nexprs $N j->(@nexprs $N k->k<j ? nothing : (dE_j_k += dE0*v_j*v_k; V4_j_k += v2*v_j*v_k))
-                @nexprs $N iter1->(@nexprs $N iter2->iter2<iter1 ? nothing : (@nexprs $N iter3->iter3<iter2 ? nothing : (@nexprs $N iter4->iter4<iter3 ? nothing : (C_iter1_iter2_iter3_iter4 += v_iter1*v_iter2*v_iter3*v_iter4))))
+                @nexprs $N d -> (v2 += v_d * v_d)
+                r = num / den
+                dE0 = r - E0
+                @nexprs $N j -> (@nexprs $N k -> k < j ? nothing : (dE_j_k += dE0 * v_j * v_k; V4_j_k += v2 * v_j * v_k))
+                @nexprs $N iter1 -> (@nexprs $N iter2 -> iter2 < iter1 ? nothing : (@nexprs $N iter3 -> iter3 < iter2 ? nothing : (@nexprs $N iter4 -> iter4 < iter3 ? nothing : (C_iter1_iter2_iter3_iter4 += v_iter1 * v_iter2 * v_iter3 * v_iter4))))
             end
         end
-        @nexprs $N i->(@nexprs $N j->j<i ? (dE[i,j] = dE_j_i; V4[i,j] = V4_j_i) : (dE[i,j] = dE_i_j; V4[i,j] = V4_i_j))
-        @nexprs $N iter1->(@nexprs $N iter2->iter2<iter1 ? nothing : (@nexprs $N iter3->iter3<iter2 ? nothing : (@nexprs $N iter4->iter4<iter3 ? nothing : (C[iter1,iter2,iter3,iter4] = C_iter1_iter2_iter3_iter4))))
+        @nexprs $N i -> (@nexprs $N j -> j < i ? (dE[i, j] = dE_j_i; V4[i, j] = V4_j_i) : (dE[i, j] = dE_i_j; V4[i, j] = V4_i_j))
+        @nexprs $N iter1 -> (@nexprs $N iter2 -> iter2 < iter1 ? nothing : (@nexprs $N iter3 -> iter3 < iter2 ? nothing : (@nexprs $N iter4 -> iter4 < iter3 ? nothing : (C[iter1, iter2, iter3, iter4] = C_iter1_iter2_iter3_iter4))))
         sortindex = Vector{Int}(undef, 4)
-        for iter1 = 1:$N, iter2 = 1:$N, iter3 = 1:$N, iter4 = 1:$N
+        for iter1 in 1:$N, iter2 in 1:$N, iter3 in 1:$N, iter4 in 1:$N
             sortindex[1] = iter1
             sortindex[2] = iter2
             sortindex[3] = iter3
             sortindex[4] = iter4
             sort!(sortindex)
-            C[iter1,iter2,iter3,iter4] = C[sortindex[1],sortindex[2],sortindex[3],sortindex[4]]
+            C[iter1, iter2, iter3, iter4] = C[sortindex[1], sortindex[2], sortindex[3], sortindex[4]]
         end
         dE, V4, C
     end
@@ -392,8 +394,8 @@ coordinate satisfies `|u[d]-u0[d]| <= maxsep[d]`. If `opt` is false,
 `Q` is a heuristic estimate of the best-fit `Q`. This can boost
 performance at the cost of accuracy.
 """
-function qfit(mm::MismatchArray, thresh::Real; maxsep=size(mm), opt::Bool=true)
-    qfit(mm, thresh, maxsep, opt)
+function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true)
+    return qfit(mm, thresh, maxsep, opt)
 end
 
 function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
@@ -405,7 +407,7 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
     imin = 0
     for (i, nd) in enumerate(mm)
         if nd.denom > thresh
-            r = nd.num/nd.denom
+            r = nd.num / nd.denom
             if r < E0
                 imin = i
                 E0 = r
@@ -417,8 +419,8 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
     end
     umin = CartesianIndices(size(mm))[imin]  # not yet relative to center
     uout = T[Tuple(umin)...]
-    for i = 1:d
-        uout[i] -= (size(mm,i)+1)>>1
+    for i in 1:d
+        uout[i] -= (size(mm, i) + 1) >> 1
     end
     dE = Matrix{T}(undef, d, d)
     V4 = similar(dE)
@@ -433,7 +435,7 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
     U, s, V = svd(M)
     sinv = sv_inv(T, s)
     Minv = V * Diagonal(sinv) * U'
-    Q = Minv*dE*Minv
+    Q = Minv * dE * Minv
     opt || return E0, uout, Q
     local QL
     try
@@ -442,23 +444,23 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
         if isa(err, LinAlg.PosDefException)
             @warn("Fixing positive-definite exception:")
             @show V4 dE M Q
-            QL = convert(Matrix{T}, chol(Q+T(0.001)*mean(diag(Q))*I, Val{:L}))::Matrix{T}
+            QL = convert(Matrix{T}, chol(Q + T(0.001) * mean(diag(Q)) * I, Val{:L}))::Matrix{T}
         else
             rethrow(err)
         end
     end
 
     # Optimize QL
-    x = zeros(T, (d*(d+1))>>1)
+    x = zeros(T, (d * (d + 1)) >> 1)
     indx = 0
-    for i = 1:d,j=1:d
-        if i>=j
-            x[indx+=1] = QL[i,j]
+    for i in 1:d,j in 1:d
+        if i >= j
+            x[indx += 1] = QL[i, j]
         end
     end
     local results
     function solveql(C, dE, QL, x)
-        nlsolve((fx, x)->QLerr!(x, fx, C, dE, similar(QL)), (gx, x)->QLjac!(x, gx, C, similar(QL)), x)
+        return nlsolve((fx, x) -> QLerr!(x, fx, C, dE, similar(QL)), (gx, x) -> QLjac!(x, gx, C, similar(QL)), x)
     end
     try
         results = solveql(C, dE, QL, x)
@@ -467,12 +469,12 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
         rethrow(err)
     end
     unpackL!(QL, results.zero)
-    E0, uout, QL'*QL
+    return E0, uout, QL' * QL
 end
 
-@noinline function sv_inv(::Type{T}, s) where T
+@noinline function sv_inv(::Type{T}, s) where {T}
     s1 = s[1]
-    sinv = T[v < sqrt(eps(T))*s1 ? zero(T) : 1/v for v in s]
+    return sinv = T[v < sqrt(eps(T)) * s1 ? zero(T) : 1 / v for v in s]
 end
 
 """
@@ -483,67 +485,69 @@ modifying the data in-place (after computing `cs` and `Qs`).
 
 The return values are suited for input the `fixed_λ` and `auto_λ`.
 """
-function mms2fit!(mms::AbstractArray{A,N}, thresh) where {A<:MismatchArray,N}
+function mms2fit!(mms::AbstractArray{A, N}, thresh) where {A <: MismatchArray, N}
     T = eltype(eltype(A))
     gridsize = size(mms)
-    cs = Array{SVector{N,T}}(undef, gridsize)
+    cs = Array{SVector{N, T}}(undef, gridsize)
     Qs = Array{similar_type(SArray, T, Size(N, N))}(undef, gridsize)
-    for i = 1:length(mms)
-        _, cs[i], Qs[i] = qfit(mms[i], thresh; opt=false)
+    for i in 1:length(mms)
+        _, cs[i], Qs[i] = qfit(mms[i], thresh; opt = false)
     end
     mmis = interpolate_mm!(mms)
-    cs, Qs, mmis
+    return cs, Qs, mmis
 end
 
 function unpackL!(QL, x)
     d = size(QL, 1)
     indx = 0
-    for i = 1:d,j=1:d
-        if i>=j
-            QL[i,j] = x[indx+=1]
+    for i in 1:d,j in 1:d
+        if i >= j
+            QL[i, j] = x[indx += 1]
         end
     end
-    QL
+    return QL
 end
 
 function QLerr!(x, fx, C, dE, L)
-    d = size(L,1)
+    d = size(L, 1)
     fill!(L, 0)
     unpackL!(L, x)
     indx = 0
-    T = typeof(C[1,1,1,1]*L[1,1] + C[1,1,1,1]*L[1,1])
-    for i = 1:d, j=1:d
+    T = typeof(C[1, 1, 1, 1] * L[1, 1] + C[1, 1, 1, 1] * L[1, 1])
+    for i in 1:d, j in 1:d
         if i >= j
             tmp = zero(T)
-            for l=1:d,m=1:d,n=1:d
-                tmp += L[l,m]*L[l,n]*C[i,j,m,n]
+            for l in 1:d,m in 1:d,n in 1:d
+                tmp += L[l, m] * L[l, n] * C[i, j, m, n]
             end
-            fx[indx+=1] = tmp - dE[i,j]
+            fx[indx += 1] = tmp - dE[i, j]
         end
     end
+    return
 end
 
 function QLjac!(x, gx, C, L)
-    d = size(L,1)
+    d = size(L, 1)
     fill!(L, 0)
     unpackL!(L, x)
-    T = typeof(C[1,1,1,1]*L[1,1] + C[1,1,1,1]*L[1,1])
+    T = typeof(C[1, 1, 1, 1] * L[1, 1] + C[1, 1, 1, 1] * L[1, 1])
     indx1 = 0
-    for i=1:d, j=1:d
+    for i in 1:d, j in 1:d
         if i >= j
             indx1 += 1
             indx2 = 0
-            for a=1:d, b=1:d
+            for a in 1:d, b in 1:d
                 if a >= b
                     tmp = zero(T)
-                    for k = 1:d
-                        tmp += (C[i,j,b,k]+C[i,j,k,b])*L[a,k]
+                    for k in 1:d
+                        tmp += (C[i, j, b, k] + C[i, j, k, b]) * L[a, k]
                     end
-                    gx[indx1, indx2+=1] = tmp
+                    gx[indx1, indx2 += 1] = tmp
                 end
             end
         end
     end
+    return
 end
 
 end
