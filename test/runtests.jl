@@ -71,6 +71,58 @@ end
     @test A.data ≈ v1.+v2'.+2
 end
 
+@testset "uisvalid and uclamp!" begin
+    # maxshift must exceed register_half (0.5001) for the bounds to be non-trivial
+    maxshift = (3, 3, 4)
+    u_valid = reshape([1.0, -2.0, 0.5], 3, 1)
+    @test RegisterFit.uisvalid(u_valid, maxshift)
+    u_invalid = reshape([2.6, -2.0, 0.5], 3, 1)
+    @test !RegisterFit.uisvalid(u_invalid, maxshift)
+
+    u_clamp = reshape([5.0, -6.0, 0.1], 3, 1)
+    RegisterFit.uclamp!(u_clamp, maxshift)
+    @test abs(u_clamp[1]) < maxshift[1]
+    @test abs(u_clamp[2]) < maxshift[2]
+    @test abs(u_clamp[3]) < maxshift[3]
+end
+
+@testset "qfit edge cases" begin
+    # All below threshold → zero return
+    num = rand(5, 5)
+    denom = zeros(5, 5)
+    E0, c, Q = RegisterFit.qfit(MismatchArray(num, denom), 1.0)
+    @test E0 == 0
+    @test all(c .== 0)
+    @test all(Q .== 0)
+end
+
+@testset "optimize_per_aperture" begin
+    # 1D grid of 2D mismatch arrays; only first shift component is stored per aperture
+    # argmin_mismatch trims edges, so use shifts within -1:1 for a 5×5 array
+    Q = [1.0 0; 0 1.0]
+    mm1 = MismatchArray(quadratic(5, 5, [1, 0], Q), ones(5, 5))
+    mm2 = MismatchArray(quadratic(5, 5, [-1, 0], Q), ones(5, 5))
+    mms = [mm1, mm2]
+    u = RegisterFit.optimize_per_aperture(mms, 0.5)
+    @test size(u) == (1, 2)
+    @test u[1, 1] ≈ 1
+    @test u[1, 2] ≈ -1
+end
+
+@testset "mms2fit!" begin
+    # Grid dimensionality must match the shift dimensionality of each mismatch array
+    Q = [1.0 0; 0 1.0]
+    mm1 = MismatchArray(quadratic(5, 5, [1, -1], Q), ones(5, 5))
+    mm2 = MismatchArray(quadratic(5, 5, [0,  1], Q), ones(5, 5))
+    mm3 = MismatchArray(quadratic(5, 5, [-1, 0], Q), ones(5, 5))
+    mm4 = MismatchArray(quadratic(5, 5, [1,  0], Q), ones(5, 5))
+    mms = reshape([mm1, mm2, mm3, mm4], 2, 2)
+    cs, Qs, mmis = RegisterFit.mms2fit!(mms, 0.5)
+    @test size(cs) == (2, 2)
+    @test cs[1, 1] ≈ [1.0, -1.0] atol=1e-10
+    @test cs[2, 1] ≈ [0.0,  1.0] atol=1e-10
+end
+
 @testset "PAT" begin
     # Principal Axes Transformation
     fixed = zeros(10,11)
@@ -87,6 +139,13 @@ end
         @test abs(S[2,1]) ≈ 1
         @test abs(S[1,1]) < 1e-8
         @test abs(S[2,2]) < 1e-8
+    end
+
+    # Test the array-input convenience wrapper
+    tfms2 = RegisterFit.pat_rotation(fixed, moving)
+    @test length(tfms2) == length(tfm)
+    for i in eachindex(tfm)
+        @test tfms2[i].linear ≈ tfm[i].linear
     end
 
     F = meanfinite(abs.(fixed); dims = (1,2))[1]

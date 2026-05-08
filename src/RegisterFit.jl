@@ -6,7 +6,7 @@ using Interpolations: Interpolations
 using LinearAlgebra: LinearAlgebra, Diagonal, Hermitian, I, cholesky, det, diag, dot, eigen, mul!, svd
 using NLsolve: NLsolve, nlsolve
 using Optim: Optim
-using RegisterCore: RegisterCore, MismatchArray, NumDenom, maxshift
+using RegisterCore: RegisterCore, MismatchArray, NumDenom, argmin_mismatch, maxshift
 using RegisterPenalty: RegisterPenalty, interpolate_mm!
 using StaticArrays: StaticArrays, SArray, SVector, Size, StaticVector, similar_type
 using Statistics: Statistics, mean
@@ -148,7 +148,7 @@ displacement in each aperture to minimize the mismatch. Each aperture
 is examined independently of all others. `thresh` establishes a
 threshold for the mismatch data.
 
-See also `indmin_mismatch`.
+See also `argmin_mismatch`.
 """
 function optimize_per_aperture(mms, thresh)
     gridsize = size(mms)
@@ -156,7 +156,7 @@ function optimize_per_aperture(mms, thresh)
     u = zeros(nd, gridsize...)
     utmp = zeros(nd)
     for (iblock,mm) in enumerate(mms)
-        I = indmin_mismatch(mm, thresh)
+        I = argmin_mismatch(mm, thresh)
         for idim = 1:nd
             u[idim,iblock] = I[idim]
         end
@@ -334,7 +334,7 @@ function pat_rotation(fixedmoments::Tuple{Vector,Matrix}, moving::AbstractArray,
     tfms
 end
 
-pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = eye(ndims(fixed))) =
+pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = Matrix{Float64}(I, ndims(fixed), ndims(fixed))) =
     pat_rotation(principalaxes(fixed), moving, SD)
 
 function pat_at(S, SD, c, fmean, mmean)
