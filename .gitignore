@@ -4,4 +4,3 @@
 deps/deps.jl
 Manifest.toml
 Manifest-v*.toml
-docs/build/
