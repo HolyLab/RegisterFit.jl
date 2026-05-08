@@ -263,7 +263,7 @@ false
 """
 function uisvalid(u::AbstractArray{T}, maxshift) where {T <: Number}
     nd = size(u, 1)
-    sztail = Base.tail(size(u))
+    sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
         if abs(u[idim, j]) >= maxshift[idim] - register_half
             return false
@@ -294,7 +294,7 @@ julia> uclamp!(u, (3, 3))
 """
 function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
     nd = size(u, 1)
-    sztail = Base.tail(size(u))
+    sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
         u[idim, j] = max(-maxshift[idim] + register_half_safe, min(u[idim, j], maxshift[idim] - register_half_safe))
     end
