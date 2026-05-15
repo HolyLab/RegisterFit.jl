@@ -537,6 +537,8 @@ exist, returns `(zero(T), zeros(T, d), zeros(T, d, d))`.
 `maxsep` restricts the fit to shifts satisfying `|u[d] - u0[d]| ≤ maxsep[d]`.
 Setting `opt=false` uses a fast heuristic for `Q` instead of a full nonlinear
 solve, trading accuracy for speed.
+`solver_kwargs` is a `NamedTuple` of keyword arguments forwarded to `NLsolve.nlsolve`
+when `opt=true` (e.g. `solver_kwargs=(iterations=100, ftol=1e-10)`).
 
 # Returns
 - `E0::T` — mismatch value at the fitted minimum
@@ -565,11 +567,11 @@ julia> Q ≈ [1.0 0.0; 0.0 1.0]
 true
 ```
 """
-function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true)
-    return qfit(mm, thresh, maxsep, opt)
+function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true, solver_kwargs = (;))
+    return qfit(mm, thresh, maxsep, opt; solver_kwargs)
 end
 
-function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
+function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool; solver_kwargs = (;))
     T = eltype(eltype(mm))
     threshT = convert(T, thresh)
     d = ndims(mm)
@@ -631,7 +633,7 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
     end
     local results
     function solveql(C, dE, QL, x)
-        return nlsolve((fx, x) -> QLerr!(x, fx, C, dE, similar(QL)), (gx, x) -> QLjac!(x, gx, C, similar(QL)), x)
+        return nlsolve((fx, x) -> QLerr!(x, fx, C, dE, similar(QL)), (gx, x) -> QLjac!(x, gx, C, similar(QL)), x; solver_kwargs...)
     end
     try
         results = solveql(C, dE, QL, x)

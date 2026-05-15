@@ -115,6 +115,12 @@ end
     @test E0 == 0
     @test all(c .== 0)
     @test all(Q .== 0)
+
+    # solver_kwargs forwarded to nlsolve (iterations=1 forces early exit but must not error)
+    denom2 = ones(11, 11)
+    Qmat = rand(Float64, 2, 2); Qmat = Qmat'*Qmat
+    num2 = quadratic(11, 11, [1, -2], Qmat)
+    @test_nowarn RegisterFit.qfit(MismatchArray(num2, denom2), 1e-3; solver_kwargs=(iterations=1,))
 end
 
 @testset "optimize_per_aperture" begin
