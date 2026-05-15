@@ -4,7 +4,7 @@
 
 ```@docs
 mismatch2affine
-pat_rotation
+principalaxes_rotation
 optimize_per_aperture
 ```
 
@@ -12,6 +12,7 @@ optimize_per_aperture
 
 ```@docs
 qfit
+mms2fit
 mms2fit!
 qbuild
 ```
@@ -20,6 +21,7 @@ qbuild
 
 ```@docs
 uisvalid
+uclamp
 uclamp!
 principalaxes
 ```

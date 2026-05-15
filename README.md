@@ -50,7 +50,7 @@ using RegisterFit
 fixed  = zeros(5, 7); fixed[3, 2:6]  .= 1.0
 moving = zeros(7, 5); moving[2:6, 3] .= 1.0
 
-tfms = pat_rotation(fixed, moving)   # 2 candidate AffineMap transforms in 2D
+tfms = principalaxes_rotation(fixed, moving)   # 2 candidate AffineMap transforms in 2D
 # Evaluate each candidate against mismatch data and pick the best
 ```
 

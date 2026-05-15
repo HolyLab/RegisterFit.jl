@@ -1,6 +1,6 @@
 import RegisterFit
 using Test, Aqua, ExplicitImports, Documenter, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
-using RegisterCore
+using RegisterCore, StaticArrays
 
 using RegisterUtilities
 
@@ -74,6 +74,10 @@ end
     v1 = 0.3*((-5:5).+1).^2
     v2 = 0.5*((-5:5).-1).^2
     @test A.data ≈ v1.+v2'.+2
+
+    # accepts StaticArrays (as produced by mms2fit!)
+    A2 = RegisterFit.qbuild(2, SVector(-1.0, 1.0), SMatrix{2,2}(0.3, 0.0, 0.0, 0.5), (5,5))
+    @test A2.data ≈ A.data
 end
 
 @testset "uisvalid and uclamp!" begin
@@ -89,6 +93,18 @@ end
     @test abs(u_clamp[1]) < maxshift[1]
     @test abs(u_clamp[2]) < maxshift[2]
     @test abs(u_clamp[3]) < maxshift[3]
+
+    # scalar maxshift must be rejected (Union{AbstractVector,Tuple} annotation)
+    @test_throws MethodError RegisterFit.uisvalid(u_valid, 3)
+    @test_throws MethodError RegisterFit.uclamp!(copy(u_clamp), 3)
+
+    # non-mutating uclamp returns clamped copy, leaves original intact
+    u_orig = reshape([5.0, -6.0, 0.1], 3, 1)
+    u_snapshot = copy(u_orig)
+    u_result = RegisterFit.uclamp(u_orig, maxshift)
+    @test u_result !== u_orig
+    @test u_orig == u_snapshot
+    @test u_result == RegisterFit.uclamp!(copy(u_snapshot), maxshift)
 end
 
 @testset "qfit edge cases" begin
@@ -99,6 +115,16 @@ end
     @test E0 == 0
     @test all(c .== 0)
     @test all(Q .== 0)
+
+    # solver_kwargs forwarded to nlsolve (iterations=1 forces early exit but must not error)
+    denom2 = ones(11, 11)
+    Qmat = rand(Float64, 2, 2); Qmat = Qmat'*Qmat
+    num2 = quadratic(11, 11, [1, -2], Qmat)
+    @test_nowarn RegisterFit.qfit(MismatchArray(num2, denom2), 1e-3; solver_kwargs=(iterations=1,))
+
+    # positional 4-arg form no longer exists (Breaking: CHUNK-007)
+    mm2 = MismatchArray(num2, denom2)
+    @test_throws MethodError RegisterFit.qfit(mm2, 1e-3, size(mm2), false)
 end
 
 @testset "optimize_per_aperture" begin
@@ -128,6 +154,22 @@ end
     @test cs[2, 1] ≈ [0.0,  1.0] atol=1e-10
 end
 
+@testset "mms2fit" begin
+    Q = [1.0 0; 0 1.0]
+    mm1 = MismatchArray(quadratic(5, 5, [1, -1], Q), ones(5, 5))
+    mm2 = MismatchArray(quadratic(5, 5, [0,  1], Q), ones(5, 5))
+    mm3 = MismatchArray(quadratic(5, 5, [-1, 0], Q), ones(5, 5))
+    mm4 = MismatchArray(quadratic(5, 5, [1,  0], Q), ones(5, 5))
+    mms = reshape([mm1, mm2, mm3, mm4], 2, 2)
+    # snapshot raw data before call; interpolate_mm! writes B-spline coefficients in-place
+    data_before = copy(mms[1, 1].data)
+    cs, Qs, mmis = RegisterFit.mms2fit(mms, 0.5)
+    @test mms[1, 1].data == data_before        # original unmodified
+    @test size(cs) == (2, 2)
+    @test cs[1, 1] ≈ [1.0, -1.0] atol=1e-10   # same results as mms2fit!
+    @test cs[2, 1] ≈ [0.0,  1.0] atol=1e-10
+end
+
 @testset "PAT" begin
     # Principal Axes Transformation
     fixed = zeros(10,11)
@@ -137,7 +179,7 @@ end
     moving[3:7,8] .= 1
     moving[2:8,7] .= 1
     fmean, fvar = RegisterFit.principalaxes(fixed)
-    tfm = RegisterFit.pat_rotation((fmean, fvar), moving)
+    tfm = RegisterFit.principalaxes_rotation((fmean, fvar), moving)
     for i = 1:2
         S = tfm[i].linear
         @test abs(S[1,2]) ≈ 1
@@ -147,7 +189,7 @@ end
     end
 
     # Test the array-input convenience wrapper
-    tfms2 = RegisterFit.pat_rotation(fixed, moving)
+    tfms2 = RegisterFit.principalaxes_rotation(fixed, moving)
     @test length(tfms2) == length(tfm)
     for i in eachindex(tfm)
         @test tfms2[i].linear ≈ tfm[i].linear

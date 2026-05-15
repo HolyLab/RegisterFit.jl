@@ -14,14 +14,16 @@ import Base.Cartesian: @nloops, @nexprs, @nref, @nif
 
 export
     mismatch2affine,
+    mms2fit,
     mms2fit!,
     optimize_per_aperture,
-    pat_rotation,
     principalaxes,
+    principalaxes_rotation,
     qbuild,
     qfit,
-    uisvalid,
-    uclamp!
+    uclamp,
+    uclamp!,
+    uisvalid
 
 """
 RegisterFit provides functions that compute affine transformations minimizing
@@ -30,7 +32,7 @@ image registration mismatch, given per-aperture mismatch data from `RegisterMism
 ## Global optimization
 
 - [`mismatch2affine`](@ref): affine transform from mismatch data by least squares
-- [`pat_rotation`](@ref): rigid alignment via a Principal Axes Transformation
+- [`principalaxes_rotation`](@ref): rigid alignment via a Principal Axes Transformation
 - [`optimize_per_aperture`](@ref): naive per-aperture displacement search
 
 ## Utilities
@@ -225,7 +227,7 @@ julia> r[0, 0]
 5.0
 ```
 """
-function qbuild(E0::Real, umin::Vector, Q::Matrix, maxshift)
+function qbuild(E0::Real, umin::AbstractVector, Q::AbstractMatrix, maxshift::Union{AbstractVector,Tuple})
     d = length(maxshift)
     (size(Q, 1) == d && size(Q, 2) == d && length(umin) == d) || error("Size mismatch")
     szout = ((2 * [maxshift...] .+ 1)...,)
@@ -261,7 +263,7 @@ julia> uisvalid([2.5, 0.5], (3, 3))
 false
 ```
 """
-function uisvalid(u::AbstractArray{T}, maxshift) where {T <: Number}
+function uisvalid(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) where {T <: Number}
     nd = size(u, 1)
     sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
@@ -292,7 +294,7 @@ julia> uclamp!(u, (3, 3))
  -2.49
 ```
 """
-function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
+function uclamp!(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) where {T <: Number}
     nd = size(u, 1)
     sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
@@ -301,10 +303,18 @@ function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
     return u
 end
 
-function uclamp!(u::AbstractArray{T}, maxshift) where {T <: StaticVector}
+function uclamp!(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) where {T <: StaticVector}
     uclamp!(reshape(reinterpret(eltype(T), vec(u)), (length(T), size(u)...)), maxshift)
     return u
 end
+
+"""
+    uclamp(u, maxshift)
+
+Non-mutating counterpart to [`uclamp!`](@ref). Returns a clamped copy of `u`;
+the original is unmodified.
+"""
+uclamp(u::AbstractArray, maxshift::Union{AbstractVector,Tuple}) = uclamp!(copy(u), maxshift)
 
 """
     center, cov = principalaxes(img)
@@ -379,10 +389,10 @@ end
 end
 
 """
-    tfms = pat_rotation(fixed, moving)
-    tfms = pat_rotation(fixed, moving, SD)
-    tfms = pat_rotation(fixedpa, moving)
-    tfms = pat_rotation(fixedpa, moving, SD)
+    tfms = principalaxes_rotation(fixed, moving)
+    tfms = principalaxes_rotation(fixed, moving, SD)
+    tfms = principalaxes_rotation(fixedpa, moving)
+    tfms = principalaxes_rotation(fixedpa, moving, SD)
 
 Compute the Principal Axes Transform (PAT) aligning the low-order intensity
 moments of two images. `fixed` is the reference image and `moving` is the image
@@ -406,7 +416,7 @@ julia> fixed = zeros(5, 7); fixed[3, 2:6] .= 1.0;   # horizontal bar
 
 julia> moving = zeros(7, 5); moving[2:6, 3] .= 1.0;  # vertical bar
 
-julia> tfms = pat_rotation(fixed, moving);
+julia> tfms = principalaxes_rotation(fixed, moving);
 
 julia> length(tfms)
 2
@@ -417,7 +427,7 @@ julia> tfms[1].linear   # ≈ 90° rotation
  -1.0  0.0
 ```
 """
-function pat_rotation(
+function principalaxes_rotation(
         fixedmoments::Tuple{Vector, Matrix}, moving::AbstractArray,
         SD = Matrix{Float64}(I, ndims(moving), ndims(moving))
     )
@@ -463,8 +473,8 @@ function pat_rotation(
     return tfms
 end
 
-pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = Matrix{Float64}(I, ndims(fixed), ndims(fixed))) =
-    pat_rotation(principalaxes(fixed), moving, SD)
+principalaxes_rotation(fixed::AbstractArray, moving::AbstractArray, SD = Matrix{Float64}(I, ndims(fixed), ndims(fixed))) =
+    principalaxes_rotation(principalaxes(fixed), moving, SD)
 
 function pat_at(S, SD, c, fmean, mmean)
     Sp = SD \ (S * SD)
@@ -527,6 +537,8 @@ exist, returns `(zero(T), zeros(T, d), zeros(T, d, d))`.
 `maxsep` restricts the fit to shifts satisfying `|u[d] - u0[d]| ≤ maxsep[d]`.
 Setting `opt=false` uses a fast heuristic for `Q` instead of a full nonlinear
 solve, trading accuracy for speed.
+`solver_kwargs` is a `NamedTuple` of keyword arguments forwarded to `NLsolve.nlsolve`
+when `opt=true` (e.g. `solver_kwargs=(iterations=100, ftol=1e-10)`).
 
 # Returns
 - `E0::T` — mismatch value at the fitted minimum
@@ -555,11 +567,11 @@ julia> Q ≈ [1.0 0.0; 0.0 1.0]
 true
 ```
 """
-function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true)
-    return qfit(mm, thresh, maxsep, opt)
+function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true, solver_kwargs = (;))
+    return _qfit(mm, thresh, maxsep, opt; solver_kwargs)
 end
 
-function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
+function _qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool; solver_kwargs = (;))
     T = eltype(eltype(mm))
     threshT = convert(T, thresh)
     d = ndims(mm)
@@ -621,7 +633,7 @@ function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool)
     end
     local results
     function solveql(C, dE, QL, x)
-        return nlsolve((fx, x) -> QLerr!(x, fx, C, dE, similar(QL)), (gx, x) -> QLjac!(x, gx, C, similar(QL)), x)
+        return nlsolve((fx, x) -> QLerr!(x, fx, C, dE, similar(QL)), (gx, x) -> QLjac!(x, gx, C, similar(QL)), x; solver_kwargs...)
     end
     try
         results = solveql(C, dE, QL, x)
@@ -685,6 +697,16 @@ function mms2fit!(mms::AbstractArray{A, N}, thresh) where {A <: MismatchArray, N
     mmis = interpolate_mm!(mms)
     return cs, Qs, mmis
 end
+
+"""
+    mms2fit(mms, thresh)
+
+Non-mutating counterpart to [`mms2fit!`](@ref). Returns the same `(cs, Qs, mmis)` tuple
+without modifying `mms`. Uses `deepcopy` because `interpolate_mm!` writes B-spline
+coefficients into the underlying data of each `MismatchArray` element in-place.
+"""
+mms2fit(mms::AbstractArray{A, N}, thresh) where {A <: MismatchArray, N} =
+    mms2fit!(deepcopy(mms), thresh)
 
 function unpackL!(QL, x)
     d = size(QL, 1)
