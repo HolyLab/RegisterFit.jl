@@ -53,7 +53,7 @@ result is an `AffineMap` from
 
 ### Principal Axes Transform
 
-[`pat_rotation`](@ref) provides a complementary rigid-alignment approach that
+[`principalaxes_rotation`](@ref) provides a complementary rigid-alignment approach that
 matches the intensity-weighted covariance ellipsoids of two images. It is useful
 as an initial guess before running the quadratic optimization. Because an ellipsoid
 is symmetric, there are 2 candidate rotations in 2D and 4 in 3D; you must evaluate
@@ -74,7 +74,7 @@ cs, Qs, mmis = mms2fit!(mms, thresh)
 tform = mismatch2affine(mms, thresh, knots)
 
 # 4. (Optional) rigid pre-alignment with PAT
-candidates = pat_rotation(fixed, moving)
+candidates = principalaxes_rotation(fixed, moving)
 # … pick best candidate, then refine with mismatch2affine / RegisterDeformation
 ```
 
@@ -100,6 +100,6 @@ using RegisterFit
 fixed  = zeros(5, 7); fixed[3, 2:6]  .= 1.0   # horizontal bar
 moving = zeros(7, 5); moving[2:6, 3] .= 1.0   # vertical bar
 
-tfms = pat_rotation(fixed, moving)   # 2 candidate AffineMap transforms
+tfms = principalaxes_rotation(fixed, moving)   # 2 candidate AffineMap transforms
 # Select the candidate with the smallest mismatch
 ```

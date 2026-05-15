@@ -17,8 +17,8 @@ export
     mms2fit,
     mms2fit!,
     optimize_per_aperture,
-    pat_rotation,
     principalaxes,
+    principalaxes_rotation,
     qbuild,
     qfit,
     uclamp,
@@ -32,7 +32,7 @@ image registration mismatch, given per-aperture mismatch data from `RegisterMism
 ## Global optimization
 
 - [`mismatch2affine`](@ref): affine transform from mismatch data by least squares
-- [`pat_rotation`](@ref): rigid alignment via a Principal Axes Transformation
+- [`principalaxes_rotation`](@ref): rigid alignment via a Principal Axes Transformation
 - [`optimize_per_aperture`](@ref): naive per-aperture displacement search
 
 ## Utilities
@@ -389,10 +389,10 @@ end
 end
 
 """
-    tfms = pat_rotation(fixed, moving)
-    tfms = pat_rotation(fixed, moving, SD)
-    tfms = pat_rotation(fixedpa, moving)
-    tfms = pat_rotation(fixedpa, moving, SD)
+    tfms = principalaxes_rotation(fixed, moving)
+    tfms = principalaxes_rotation(fixed, moving, SD)
+    tfms = principalaxes_rotation(fixedpa, moving)
+    tfms = principalaxes_rotation(fixedpa, moving, SD)
 
 Compute the Principal Axes Transform (PAT) aligning the low-order intensity
 moments of two images. `fixed` is the reference image and `moving` is the image
@@ -416,7 +416,7 @@ julia> fixed = zeros(5, 7); fixed[3, 2:6] .= 1.0;   # horizontal bar
 
 julia> moving = zeros(7, 5); moving[2:6, 3] .= 1.0;  # vertical bar
 
-julia> tfms = pat_rotation(fixed, moving);
+julia> tfms = principalaxes_rotation(fixed, moving);
 
 julia> length(tfms)
 2
@@ -427,7 +427,7 @@ julia> tfms[1].linear   # ≈ 90° rotation
  -1.0  0.0
 ```
 """
-function pat_rotation(
+function principalaxes_rotation(
         fixedmoments::Tuple{Vector, Matrix}, moving::AbstractArray,
         SD = Matrix{Float64}(I, ndims(moving), ndims(moving))
     )
@@ -473,8 +473,8 @@ function pat_rotation(
     return tfms
 end
 
-pat_rotation(fixed::AbstractArray, moving::AbstractArray, SD = Matrix{Float64}(I, ndims(fixed), ndims(fixed))) =
-    pat_rotation(principalaxes(fixed), moving, SD)
+principalaxes_rotation(fixed::AbstractArray, moving::AbstractArray, SD = Matrix{Float64}(I, ndims(fixed), ndims(fixed))) =
+    principalaxes_rotation(principalaxes(fixed), moving, SD)
 
 function pat_at(S, SD, c, fmean, mmean)
     Sp = SD \ (S * SD)

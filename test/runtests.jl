@@ -179,7 +179,7 @@ end
     moving[3:7,8] .= 1
     moving[2:8,7] .= 1
     fmean, fvar = RegisterFit.principalaxes(fixed)
-    tfm = RegisterFit.pat_rotation((fmean, fvar), moving)
+    tfm = RegisterFit.principalaxes_rotation((fmean, fvar), moving)
     for i = 1:2
         S = tfm[i].linear
         @test abs(S[1,2]) ≈ 1
@@ -189,7 +189,7 @@ end
     end
 
     # Test the array-input convenience wrapper
-    tfms2 = RegisterFit.pat_rotation(fixed, moving)
+    tfms2 = RegisterFit.principalaxes_rotation(fixed, moving)
     @test length(tfms2) == length(tfm)
     for i in eachindex(tfm)
         @test tfms2[i].linear ≈ tfm[i].linear
