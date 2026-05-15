@@ -20,8 +20,9 @@ export
     principalaxes,
     qbuild,
     qfit,
-    uisvalid,
-    uclamp!
+    uclamp,
+    uclamp!,
+    uisvalid
 
 """
 RegisterFit provides functions that compute affine transformations minimizing
@@ -305,6 +306,14 @@ function uclamp!(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) whe
     uclamp!(reshape(reinterpret(eltype(T), vec(u)), (length(T), size(u)...)), maxshift)
     return u
 end
+
+"""
+    uclamp(u, maxshift)
+
+Non-mutating counterpart to [`uclamp!`](@ref). Returns a clamped copy of `u`;
+the original is unmodified.
+"""
+uclamp(u::AbstractArray, maxshift::Union{AbstractVector,Tuple}) = uclamp!(copy(u), maxshift)
 
 """
     center, cov = principalaxes(img)

@@ -97,6 +97,14 @@ end
     # scalar maxshift must be rejected (Union{AbstractVector,Tuple} annotation)
     @test_throws MethodError RegisterFit.uisvalid(u_valid, 3)
     @test_throws MethodError RegisterFit.uclamp!(copy(u_clamp), 3)
+
+    # non-mutating uclamp returns clamped copy, leaves original intact
+    u_orig = reshape([5.0, -6.0, 0.1], 3, 1)
+    u_snapshot = copy(u_orig)
+    u_result = RegisterFit.uclamp(u_orig, maxshift)
+    @test u_result !== u_orig
+    @test u_orig == u_snapshot
+    @test u_result == RegisterFit.uclamp!(copy(u_snapshot), maxshift)
 end
 
 @testset "qfit edge cases" begin
