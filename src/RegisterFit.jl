@@ -14,6 +14,7 @@ import Base.Cartesian: @nloops, @nexprs, @nref, @nif
 
 export
     mismatch2affine,
+    mms2fit,
     mms2fit!,
     optimize_per_aperture,
     pat_rotation,
@@ -694,6 +695,16 @@ function mms2fit!(mms::AbstractArray{A, N}, thresh) where {A <: MismatchArray, N
     mmis = interpolate_mm!(mms)
     return cs, Qs, mmis
 end
+
+"""
+    mms2fit(mms, thresh)
+
+Non-mutating counterpart to [`mms2fit!`](@ref). Returns the same `(cs, Qs, mmis)` tuple
+without modifying `mms`. Uses `deepcopy` because `interpolate_mm!` writes B-spline
+coefficients into the underlying data of each `MismatchArray` element in-place.
+"""
+mms2fit(mms::AbstractArray{A, N}, thresh) where {A <: MismatchArray, N} =
+    mms2fit!(deepcopy(mms), thresh)
 
 function unpackL!(QL, x)
     d = size(QL, 1)

@@ -144,6 +144,22 @@ end
     @test cs[2, 1] ≈ [0.0,  1.0] atol=1e-10
 end
 
+@testset "mms2fit" begin
+    Q = [1.0 0; 0 1.0]
+    mm1 = MismatchArray(quadratic(5, 5, [1, -1], Q), ones(5, 5))
+    mm2 = MismatchArray(quadratic(5, 5, [0,  1], Q), ones(5, 5))
+    mm3 = MismatchArray(quadratic(5, 5, [-1, 0], Q), ones(5, 5))
+    mm4 = MismatchArray(quadratic(5, 5, [1,  0], Q), ones(5, 5))
+    mms = reshape([mm1, mm2, mm3, mm4], 2, 2)
+    # snapshot raw data before call; interpolate_mm! writes B-spline coefficients in-place
+    data_before = copy(mms[1, 1].data)
+    cs, Qs, mmis = RegisterFit.mms2fit(mms, 0.5)
+    @test mms[1, 1].data == data_before        # original unmodified
+    @test size(cs) == (2, 2)
+    @test cs[1, 1] ≈ [1.0, -1.0] atol=1e-10   # same results as mms2fit!
+    @test cs[2, 1] ≈ [0.0,  1.0] atol=1e-10
+end
+
 @testset "PAT" begin
     # Principal Axes Transformation
     fixed = zeros(10,11)
