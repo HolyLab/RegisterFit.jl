@@ -93,6 +93,10 @@ end
     @test abs(u_clamp[1]) < maxshift[1]
     @test abs(u_clamp[2]) < maxshift[2]
     @test abs(u_clamp[3]) < maxshift[3]
+
+    # scalar maxshift must be rejected (Union{AbstractVector,Tuple} annotation)
+    @test_throws MethodError RegisterFit.uisvalid(u_valid, 3)
+    @test_throws MethodError RegisterFit.uclamp!(copy(u_clamp), 3)
 end
 
 @testset "qfit edge cases" begin

@@ -225,7 +225,7 @@ julia> r[0, 0]
 5.0
 ```
 """
-function qbuild(E0::Real, umin::AbstractVector, Q::AbstractMatrix, maxshift)
+function qbuild(E0::Real, umin::AbstractVector, Q::AbstractMatrix, maxshift::Union{AbstractVector,Tuple})
     d = length(maxshift)
     (size(Q, 1) == d && size(Q, 2) == d && length(umin) == d) || error("Size mismatch")
     szout = ((2 * [maxshift...] .+ 1)...,)
@@ -261,7 +261,7 @@ julia> uisvalid([2.5, 0.5], (3, 3))
 false
 ```
 """
-function uisvalid(u::AbstractArray{T}, maxshift) where {T <: Number}
+function uisvalid(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) where {T <: Number}
     nd = size(u, 1)
     sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
@@ -292,7 +292,7 @@ julia> uclamp!(u, (3, 3))
  -2.49
 ```
 """
-function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
+function uclamp!(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) where {T <: Number}
     nd = size(u, 1)
     sztail = size(u)[2:end]
     for j in CartesianIndices(sztail), idim in 1:nd
@@ -301,7 +301,7 @@ function uclamp!(u::AbstractArray{T}, maxshift) where {T <: Number}
     return u
 end
 
-function uclamp!(u::AbstractArray{T}, maxshift) where {T <: StaticVector}
+function uclamp!(u::AbstractArray{T}, maxshift::Union{AbstractVector,Tuple}) where {T <: StaticVector}
     uclamp!(reshape(reinterpret(eltype(T), vec(u)), (length(T), size(u)...)), maxshift)
     return u
 end
