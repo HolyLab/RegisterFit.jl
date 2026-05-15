@@ -225,7 +225,7 @@ julia> r[0, 0]
 5.0
 ```
 """
-function qbuild(E0::Real, umin::Vector, Q::Matrix, maxshift)
+function qbuild(E0::Real, umin::AbstractVector, Q::AbstractMatrix, maxshift)
     d = length(maxshift)
     (size(Q, 1) == d && size(Q, 2) == d && length(umin) == d) || error("Size mismatch")
     szout = ((2 * [maxshift...] .+ 1)...,)

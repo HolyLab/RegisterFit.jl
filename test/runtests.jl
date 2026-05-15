@@ -1,6 +1,6 @@
 import RegisterFit
 using Test, Aqua, ExplicitImports, Documenter, CoordinateTransformations, Interpolations, ImageBase, ImageTransformations, LinearAlgebra
-using RegisterCore
+using RegisterCore, StaticArrays
 
 using RegisterUtilities
 
@@ -74,6 +74,10 @@ end
     v1 = 0.3*((-5:5).+1).^2
     v2 = 0.5*((-5:5).-1).^2
     @test A.data ≈ v1.+v2'.+2
+
+    # accepts StaticArrays (as produced by mms2fit!)
+    A2 = RegisterFit.qbuild(2, SVector(-1.0, 1.0), SMatrix{2,2}(0.3, 0.0, 0.0, 0.5), (5,5))
+    @test A2.data ≈ A.data
 end
 
 @testset "uisvalid and uclamp!" begin
