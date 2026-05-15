@@ -568,10 +568,10 @@ true
 ```
 """
 function qfit(mm::MismatchArray, thresh::Real; maxsep = size(mm), opt::Bool = true, solver_kwargs = (;))
-    return qfit(mm, thresh, maxsep, opt; solver_kwargs)
+    return _qfit(mm, thresh, maxsep, opt; solver_kwargs)
 end
 
-function qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool; solver_kwargs = (;))
+function _qfit(mm::MismatchArray, thresh::Real, maxsep, opt::Bool; solver_kwargs = (;))
     T = eltype(eltype(mm))
     threshT = convert(T, thresh)
     d = ndims(mm)

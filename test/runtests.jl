@@ -121,6 +121,10 @@ end
     Qmat = rand(Float64, 2, 2); Qmat = Qmat'*Qmat
     num2 = quadratic(11, 11, [1, -2], Qmat)
     @test_nowarn RegisterFit.qfit(MismatchArray(num2, denom2), 1e-3; solver_kwargs=(iterations=1,))
+
+    # positional 4-arg form no longer exists (Breaking: CHUNK-007)
+    mm2 = MismatchArray(num2, denom2)
+    @test_throws MethodError RegisterFit.qfit(mm2, 1e-3, size(mm2), false)
 end
 
 @testset "optimize_per_aperture" begin
